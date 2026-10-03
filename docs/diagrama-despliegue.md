@@ -1,8 +1,8 @@
 # Diagramas de despliegue
 
-> Construido a partir de 7 recursos Terraform en `infra/`, `docker-compose.yml` y 5 workflows de GitHub Actions.
+> Construido a partir de 6 recursos Terraform en `infra/`, `docker-compose.yml` y 5 workflows de GitHub Actions.
 >
-> Documento generado automáticamente por `generase-documentation.yml` (Subasta.DocGen) el 2026-10-03 02:26 UTC. No editar manualmente.
+> Documento generado automáticamente por `generase-documentation.yml` (Subasta.DocGen) el 2026-10-03 02:32 UTC. No editar manualmente.
 
 ## 1. Producción en la nube (Render, plan gratuito)
 
@@ -67,7 +67,6 @@ flowchart LR
 
 | Tipo | Nombre lógico | Descripción |
 |---|---|---|
-| `random_string` | `suffix` | Sufijo aleatorio para nombres únicos |
 | `random_password` | `app_admin` | Contraseña generada del administrador inicial |
 | `render_postgres` | `db` | Render PostgreSQL (plan free) |
 | `render_web_service` | `api` | Render Web Service - contenedor Docker de la API .NET |
