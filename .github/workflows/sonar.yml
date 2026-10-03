@@ -43,7 +43,7 @@ jobs:
             echo "SONAR_ORGANIZATION=$SONAR_ORGANIZATION" >> "$GITHUB_ENV"
           fi
           if [ -z "$SONAR_PROJECT_KEY" ]; then
-            SONAR_PROJECT_KEY="${SONAR_ORGANIZATION}_${GITHUB_REPOSITORY#*/}"
+            SONAR_PROJECT_KEY="subasta-jhonyvargas"
             echo "SONAR_PROJECT_KEY=$SONAR_PROJECT_KEY" >> "$GITHUB_ENV"
           fi
           # Crea el proyecto si aún no existe (público = gratuito)

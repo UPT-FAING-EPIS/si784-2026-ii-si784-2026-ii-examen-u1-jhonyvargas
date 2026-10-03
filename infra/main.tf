@@ -1,9 +1,3 @@
-resource "random_string" "suffix" {
-  length  = 5
-  upper   = false
-  special = false
-}
-
 resource "random_password" "app_admin" {
   length           = 20
   special          = true
@@ -11,7 +5,7 @@ resource "random_password" "app_admin" {
 }
 
 locals {
-  name           = "${var.project}-${random_string.suffix.result}"
+  name           = var.project
   admin_password = var.admin_password != "" ? var.admin_password : random_password.app_admin.result
 }
 
@@ -55,7 +49,7 @@ resource "render_web_service" "api" {
 
 # ---------- Frontend: Render Static Site (siempre gratuito) ----------
 resource "render_static_site" "web" {
-  name           = "${local.name}-web"
+  name           = local.name
   repo_url       = var.repo_url
   branch         = var.branch
   root_directory = "frontend"

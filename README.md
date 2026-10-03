@@ -155,8 +155,9 @@ Luego, en la pestaña **Actions**:
 | Ítem | URL |
 |---|---|
 | Repositorio | https://github.com/UPT-FAING-EPIS/si784-2026-ii-si784-2026-ii-examen-u1-jhonyvargas |
-| Aplicación publicada | *(se muestra en el resumen del workflow `infra` / `deploy`: `https://<nombre>-web.onrender.com`)* |
-| SonarCloud | *(se muestra en el resumen del workflow `sonar`: `https://sonarcloud.io/project/overview?id=<proyecto>`)* |
+| Aplicación publicada | https://subasta-jhonyvargas.onrender.com |
+| API publicada | https://subasta-jhonyvargas-api.onrender.com (salud: `/health`) |
+| SonarCloud | https://sonarcloud.io/project/overview?id=subasta-jhonyvargas |
 
 ## 8. Documentación técnica
 

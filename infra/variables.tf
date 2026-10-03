@@ -1,11 +1,11 @@
 variable "project" {
-  description = "Prefijo de nombres de los recursos"
+  description = "Nombre base de los servicios: define las URLs https://<project>.onrender.com (frontend) y https://<project>-api.onrender.com (API)"
   type        = string
-  default     = "subasta"
+  default     = "subasta-jhonyvargas"
 
   validation {
-    condition     = can(regex("^[a-z0-9-]{3,20}$", var.project))
-    error_message = "Solo minusculas, numeros y guiones (3-20 caracteres)."
+    condition     = can(regex("^[a-z0-9-]{3,30}$", var.project))
+    error_message = "Solo minusculas, numeros y guiones (3-30 caracteres)."
   }
 }
 
