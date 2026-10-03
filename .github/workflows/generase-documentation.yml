@@ -1,0 +1,89 @@
+# Genera la documentación técnica en formato Mermaid/Markdown:
+#  - Diccionario de datos y diagrama entidad-relación (leídos de una base PostgreSQL real con las migraciones aplicadas)
+#  - Diagrama de clases (reflexión sobre el ensamblado de la API)
+#  - Diagrama de componentes (+ tabla de endpoints)
+#  - Diagramas de despliegue (Terraform, docker-compose y workflows)
+name: generase-documentation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/src/**"
+      - "backend/tools/**"
+      - "frontend/src/**"
+      - "infra/**"
+      - "docker-compose.yml"
+      - ".github/workflows/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: docs
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+
+jobs:
+  docs:
+    name: Generar documentación
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: subasta
+          POSTGRES_USER: docs
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U docs -d subasta"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Instalar .NET 10
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Generar diccionario de datos y diagramas
+        run: >
+          dotnet run --project backend/tools/Subasta.DocGen -c Release --
+          --root "$GITHUB_WORKSPACE"
+          --output "$GITHUB_WORKSPACE/docs"
+          --connection "Host=localhost;Port=5432;Database=subasta;Username=docs"
+
+      - name: Resumen
+        run: |
+          {
+            echo "## Documentación generada"
+            for f in docs/*.md; do echo "- [\`$f\`]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/blob/$GITHUB_REF_NAME/$f)"; done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publicar artefacto
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: documentacion
+          path: docs
+          retention-days: 30
+
+      - name: Commit de la documentación
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs
+          if git diff --cached --quiet; then
+            echo "Sin cambios en la documentación."
+          else
+            git commit -m "docs: regenerar documentación técnica [skip ci]"
+            git push
+          fi

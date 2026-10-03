@@ -1,0 +1,14 @@
+# Snyk (https://snyk.io) policy file
+version: v1.25.1
+ignore: {}
+patch: {}
+# Archivos excluidos del análisis de código (Snyk Code): pruebas, herramientas de documentación y artefactos
+exclude:
+  global:
+    - backend/tests/**
+    - backend/tools/**
+    - docs/**
+    - "**/node_modules/**"
+    - "**/bin/**"
+    - "**/obj/**"
+    - "**/dist/**"

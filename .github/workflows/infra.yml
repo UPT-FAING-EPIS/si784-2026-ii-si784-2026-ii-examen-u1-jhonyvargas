@@ -1,0 +1,128 @@
+# Aprovisiona la infraestructura gratuita en Render con Terraform.
+# Estado remoto: HCP Terraform (plan gratuito) en modo de ejecución local.
+# Secretos requeridos: RENDER_API_KEY y TF_API_TOKEN (opcional: APP_ADMIN_PASSWORD).
+name: infra
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Acción de Terraform"
+        required: true
+        default: apply
+        type: choice
+        options: [plan, apply, destroy]
+  push:
+    branches: [main]
+    paths:
+      - "infra/**"
+      - ".github/workflows/infra.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: infra
+  cancel-in-progress: false
+
+jobs:
+  terraform:
+    name: Terraform
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
+    env:
+      TF_IN_AUTOMATION: "true"
+      TF_INPUT: "false"
+      TF_CLOUD_ORGANIZATION: ${{ vars.TF_CLOUD_ORGANIZATION }}
+      TF_WORKSPACE: ${{ vars.TF_WORKSPACE || 'subasta-render' }}
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      RENDER_OWNER_ID: ${{ secrets.RENDER_OWNER_ID }}
+      TF_VAR_admin_password: ${{ secrets.APP_ADMIN_PASSWORD }}
+      TF_VAR_repo_url: ${{ github.server_url }}/${{ github.repository }}
+      TF_VAR_branch: ${{ github.ref_name }}
+      ACTION: ${{ inputs.action || 'plan' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Verificar secretos
+        run: |
+          missing=0
+          for v in TF_TOKEN_app_terraform_io RENDER_API_KEY; do
+            if [ -z "${!v}" ]; then echo "::error::Falta configurar el secreto de $v (ver README, sección 5)"; missing=1; fi
+          done
+          exit $missing
+
+      - name: Detectar organización de HCP Terraform y workspace de Render
+        run: |
+          if [ -z "$TF_CLOUD_ORGANIZATION" ]; then
+            org=$(curl -sf -H "Authorization: Bearer $TF_TOKEN_app_terraform_io" https://app.terraform.io/api/v2/organizations | jq -r '.data[0].id // empty')
+            [ -n "$org" ] || { echo "::error::No se encontró una organización en HCP Terraform"; exit 1; }
+            echo "TF_CLOUD_ORGANIZATION=$org" >> "$GITHUB_ENV"
+            echo "Organización HCP Terraform: $org"
+          fi
+          if [ -z "$RENDER_OWNER_ID" ]; then
+            owner=$(curl -sf -H "Authorization: Bearer $RENDER_API_KEY" -H "Accept: application/json" "https://api.render.com/v1/owners?limit=20" | jq -r '.[0].owner.id // empty')
+            [ -n "$owner" ] || { echo "::error::No se pudo obtener el workspace de Render"; exit 1; }
+            echo "RENDER_OWNER_ID=$owner" >> "$GITHUB_ENV"
+          fi
+
+      - name: Preparar workspace de HCP Terraform (ejecución local)
+        run: |
+          api="https://app.terraform.io/api/v2/organizations/${TF_CLOUD_ORGANIZATION}/workspaces"
+          body=$(jq -n --arg name "$TF_WORKSPACE" '{data:{type:"workspaces",attributes:{name:$name,"execution-mode":"local"}}}')
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH \
+            -H "Authorization: Bearer ${TF_TOKEN_app_terraform_io}" -H "Content-Type: application/vnd.api+json" \
+            -d "$body" "$api/${TF_WORKSPACE}")
+          if [ "$code" = "404" ]; then
+            curl -sf -o /dev/null -X POST \
+              -H "Authorization: Bearer ${TF_TOKEN_app_terraform_io}" -H "Content-Type: application/vnd.api+json" \
+              -d "$body" "$api"
+            echo "Workspace $TF_WORKSPACE creado."
+          elif [ "$code" != "200" ]; then
+            echo "::error::No se pudo preparar el workspace en HCP Terraform (HTTP $code)"; exit 1
+          fi
+
+      - name: Instalar Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_wrapper: false
+
+      - name: terraform fmt
+        run: terraform fmt -check -recursive
+
+      - name: terraform init
+        run: terraform init
+
+      - name: terraform validate
+        run: terraform validate
+
+      - name: terraform plan
+        if: env.ACTION == 'plan'
+        run: terraform plan
+
+      - name: terraform apply
+        if: env.ACTION == 'apply'
+        run: terraform apply -auto-approve
+
+      - name: terraform destroy
+        if: env.ACTION == 'destroy'
+        run: terraform destroy -auto-approve
+
+      - name: Resumen de salidas
+        if: env.ACTION == 'apply'
+        run: |
+          {
+            echo "## Infraestructura aprovisionada en Render"
+            echo "| Recurso | URL |"
+            echo "|---|---|"
+            echo "| Aplicación (frontend) | $(terraform output -raw frontend_url) |"
+            echo "| API | $(terraform output -raw api_url) |"
+            echo ""
+            echo "Administrador: \`$(terraform output -raw app_admin_email)\` (la contraseña es el secreto APP_ADMIN_PASSWORD o la variable Seed__AdminPassword en Render)."
+            echo ""
+            echo "Siguiente paso: ejecutar el workflow **deploy**."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,39 @@
+# .NET
+bin/
+obj/
+TestResults/
+*.user
+.vs/
+coverage/
+*.trx
+
+# Node
+node_modules/
+dist/
+*.local
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+crash.log
+*.tfvars
+!*.tfvars.example
+
+# Entorno / secretos
+.env
+.env.*
+!.env.example
+
+# Reportes de escaneo locales
+reports/local/
+.scannerwork/
+.idea/
+.DS_Store
+
+# Base de datos local (modo SQLite)
+*.db
+*.db-shm
+*.db-wal

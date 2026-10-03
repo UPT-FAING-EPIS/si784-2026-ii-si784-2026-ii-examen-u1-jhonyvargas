@@ -1,0 +1,189 @@
+# Escaneo de seguridad gratuito:
+#  - Semgrep OSS: análisis estático (SAST) del código.
+#  - Snyk: dependencias (SCA), código (Snyk Code) e imagen del contenedor del backend.
+# Los reportes (SARIF, JSON y HTML) se publican como artefactos y en la pestaña Security.
+name: snyk-semgrep
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+
+jobs:
+  semgrep:
+    name: Semgrep (SAST)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Instalar Semgrep
+        run: pipx install semgrep
+
+      - name: Escanear código
+        run: |
+          mkdir -p reports/semgrep
+          semgrep scan --metrics=off \
+            --config p/default --config p/csharp --config p/typescript --config p/react \
+            --config p/dockerfile --config p/secrets \
+            --sarif --output reports/semgrep/semgrep.sarif \
+            --error
+
+      - name: Resumen
+        if: always()
+        run: |
+          f=reports/semgrep/semgrep.sarif
+          total=$(jq '[.runs[].results[]] | length' "$f" 2>/dev/null || echo "n/d")
+          {
+            echo "## Semgrep"
+            echo "Hallazgos: **$total**"
+            jq -r '.runs[].results[] | "- `\(.ruleId)` en \(.locations[0].physicalLocation.artifactLocation.uri):\(.locations[0].physicalLocation.region.startLine)"' "$f" 2>/dev/null
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publicar reporte
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: reporte-semgrep
+          path: reports/semgrep
+          retention-days: 30
+
+      - name: Subir a GitHub Code Scanning
+        if: always()
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: reports/semgrep/semgrep.sarif
+          category: semgrep
+
+  snyk:
+    name: Snyk (dependencias, código e imagen)
+    runs-on: ubuntu-latest
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      IMAGE: subasta-api:${{ github.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Verificar token
+        run: |
+          if [ -z "$SNYK_TOKEN" ]; then echo "::error::Falta el secreto SNYK_TOKEN (ver README)"; exit 1; fi
+
+      - name: Instalar .NET 10
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Instalar Node.js 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Instalar Snyk CLI
+        run: npm install --global --ignore-scripts snyk snyk-to-html
+
+      - name: Restaurar dependencias
+        run: |
+          dotnet restore backend/Subasta.sln
+          npm ci --ignore-scripts --prefix frontend
+
+      - name: Snyk Open Source (dependencias NuGet y npm)
+        id: deps
+        continue-on-error: true
+        run: |
+          mkdir -p reports/snyk
+          snyk test --all-projects --detection-depth=4 --severity-threshold=low \
+            --json-file-output=reports/snyk/dependencias.json --sarif-file-output=reports/snyk/dependencias.sarif
+
+      - name: Snyk Code (SAST)
+        id: code
+        continue-on-error: true
+        run: |
+          snyk code test --severity-threshold=low \
+            --json-file-output=reports/snyk/codigo.json --sarif-file-output=reports/snyk/codigo.sarif
+
+      - name: Construir imagen del backend
+        run: docker build -t "$IMAGE" backend
+
+      - name: Snyk Container (imagen)
+        id: container
+        continue-on-error: true
+        run: |
+          snyk container test "$IMAGE" --file=backend/Dockerfile --severity-threshold=low \
+            --json-file-output=reports/snyk/contenedor.json --sarif-file-output=reports/snyk/contenedor.sarif
+
+      - name: Reportes HTML y resumen
+        if: always()
+        run: |
+          {
+            echo "## Snyk"
+            echo "| Escaneo | Resultado | Vulnerabilidades |"
+            echo "|---|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for name in dependencias codigo contenedor; do
+            json="reports/snyk/$name.json"
+            [ -f "$json" ] || continue
+            snyk-to-html -i "$json" -o "reports/snyk/$name.html" || true
+            count=$(jq '[.. | objects | select(has("vulnerabilities")) | .vulnerabilities[]?] | length' "$json" 2>/dev/null || echo "0")
+            sarif="reports/snyk/$name.sarif"
+            [ "$name" = "codigo" ] && count=$(jq '[.runs[].results[]] | length' "$sarif" 2>/dev/null || echo "0")
+            result=$([ "$count" = "0" ] && echo "✅ Sin vulnerabilidades" || echo "❌ Revisar")
+            echo "| $name | $result | $count |" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      - name: Publicar reportes
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: reporte-snyk
+          path: reports/snyk
+          retention-days: 30
+
+      - name: Subir a GitHub Code Scanning (dependencias)
+        if: always() && hashFiles('reports/snyk/dependencias.sarif') != ''
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: reports/snyk/dependencias.sarif
+          category: snyk-dependencias
+
+      - name: Subir a GitHub Code Scanning (código)
+        if: always() && hashFiles('reports/snyk/codigo.sarif') != ''
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: reports/snyk/codigo.sarif
+          category: snyk-codigo
+
+      - name: Subir a GitHub Code Scanning (contenedor)
+        if: always() && hashFiles('reports/snyk/contenedor.sarif') != ''
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: reports/snyk/contenedor.sarif
+          category: snyk-contenedor
+
+      - name: Resultado final
+        env:
+          DEPS: ${{ steps.deps.outcome }}
+          CODE: ${{ steps.code.outcome }}
+          CONTAINER: ${{ steps.container.outcome }}
+        run: |
+          echo "Dependencias: $DEPS | Código: $CODE | Contenedor: $CONTAINER"
+          if [ "$DEPS" != "success" ] || [ "$CODE" != "success" ] || [ "$CONTAINER" != "success" ]; then
+            echo "::error::Snyk encontró vulnerabilidades (ver artefacto reporte-snyk)."
+            exit 1
+          fi

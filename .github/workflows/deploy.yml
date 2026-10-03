@@ -1,0 +1,140 @@
+# Despliega la aplicación en Render (plan gratuito):
+#  1. Ejecuta las pruebas del backend y compila el frontend.
+#  2. Dispara el despliegue del contenedor de la API (Render construye backend/Dockerfile).
+#  3. Dispara el despliegue del frontend (Static Site) y verifica /health.
+# Los IDs de los servicios se leen de las salidas de Terraform (infra.yml) o de variables del repositorio.
+name: deploy
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+
+jobs:
+  test:
+    name: Pruebas y build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Instalar .NET 10
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Pruebas del backend
+        run: dotnet test backend/Subasta.sln -c Release
+
+      - name: Instalar Node.js 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Build del frontend
+        working-directory: frontend
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+
+      - name: Build de la imagen del backend
+        run: docker build -t subasta-api:ci backend
+
+  deploy:
+    name: Desplegar en Render
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      TF_CLOUD_ORGANIZATION: ${{ vars.TF_CLOUD_ORGANIZATION }}
+      TF_WORKSPACE: ${{ vars.TF_WORKSPACE || 'subasta-render' }}
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
+      API_SERVICE_ID: ${{ vars.RENDER_API_SERVICE_ID }}
+      WEB_SERVICE_ID: ${{ vars.RENDER_WEB_SERVICE_ID }}
+      API_URL: ${{ vars.RENDER_API_URL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Instalar Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_wrapper: false
+
+      - name: Obtener servicios desde Terraform
+        working-directory: infra
+        run: |
+          if [ -z "$API_SERVICE_ID" ] && [ -n "$TF_TOKEN_app_terraform_io" ]; then
+            if [ -z "$TF_CLOUD_ORGANIZATION" ]; then
+              TF_CLOUD_ORGANIZATION=$(curl -sf -H "Authorization: Bearer $TF_TOKEN_app_terraform_io" https://app.terraform.io/api/v2/organizations | jq -r '.data[0].id // empty')
+              export TF_CLOUD_ORGANIZATION
+            fi
+            terraform init -input=false > /dev/null
+            echo "API_SERVICE_ID=$(terraform output -raw api_service_id)" >> "$GITHUB_ENV"
+            echo "WEB_SERVICE_ID=$(terraform output -raw web_service_id)" >> "$GITHUB_ENV"
+            echo "API_URL=$(terraform output -raw api_url)" >> "$GITHUB_ENV"
+          fi
+
+      - name: Validar configuración
+        run: |
+          if [ -z "$RENDER_API_KEY" ] || [ -z "$API_SERVICE_ID" ] || [ -z "$WEB_SERVICE_ID" ]; then
+            echo "::error::Faltan RENDER_API_KEY o los IDs de servicio. Ejecute primero infra.yml (apply)."
+            exit 1
+          fi
+
+      - name: Desplegar API (contenedor) y frontend
+        run: |
+          render() { curl -sS -f -H "Authorization: Bearer $RENDER_API_KEY" -H "Accept: application/json" "$@"; }
+
+          deploy() {
+            local service="$1" label="$2" id status
+            id=$(render -X POST -H "Content-Type: application/json" \
+              -d "{\"clearCache\":\"do_not_clear\",\"commitId\":\"$GITHUB_SHA\"}" \
+              "https://api.render.com/v1/services/$service/deploys" | jq -r '.id')
+            echo "Despliegue de $label iniciado: $id"
+            for _ in $(seq 1 60); do
+              sleep 20
+              status=$(render "https://api.render.com/v1/services/$service/deploys/$id" | jq -r '.status')
+              echo "  $label: $status"
+              case "$status" in
+                live) echo "| $label | ✅ live | $id |" >> "$GITHUB_STEP_SUMMARY"; return 0 ;;
+                build_failed|update_failed|pre_deploy_failed|canceled|deactivated)
+                  echo "| $label | ❌ $status | $id |" >> "$GITHUB_STEP_SUMMARY"; return 1 ;;
+              esac
+            done
+            echo "::error::Tiempo de espera agotado desplegando $label"; return 1
+          }
+
+          { echo "## Despliegue en Render"; echo "| Servicio | Estado | Deploy |"; echo "|---|---|---|"; } >> "$GITHUB_STEP_SUMMARY"
+          deploy "$API_SERVICE_ID" "API (.NET, Docker)"
+          deploy "$WEB_SERVICE_ID" "Frontend (React)"
+
+      - name: Verificar salud de la API
+        if: env.API_URL != ''
+        run: |
+          for i in $(seq 1 10); do
+            if curl -sf "$API_URL/health" > /dev/null; then
+              echo "API saludable: $API_URL"
+              echo "API: $API_URL" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "Intento $i: la API aún no responde (el plan gratuito puede tardar en despertar)…"
+            sleep 15
+          done
+          echo "::error::La API no respondió en $API_URL/health"
+          exit 1

@@ -1,0 +1,12 @@
+# Archivos excluidos del análisis de Semgrep
+node_modules/
+dist/
+bin/
+obj/
+docs/
+reports/
+TestResults/
+backend/tests/
+backend/tools/
+backend/src/Subasta.Api/Data/Migrations/
+*.min.js
