@@ -2,7 +2,7 @@
 
 > Generado por reflexión a partir del ensamblado Subasta.Api (dominio, servicios, controladores y hub).
 >
-> Documento generado automáticamente por `generase-documentation.yml` (Subasta.DocGen) el 2026-10-03 02:25 UTC. No editar manualmente.
+> Documento generado automáticamente por `generase-documentation.yml` (Subasta.DocGen) el 2026-10-03 02:26 UTC. No editar manualmente.
 
 ## 1. Modelo de dominio
 

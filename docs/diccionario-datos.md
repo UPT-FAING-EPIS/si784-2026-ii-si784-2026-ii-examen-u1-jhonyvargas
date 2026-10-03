@@ -1,8 +1,8 @@
 # Diccionario de datos
 
-> Fuente: Modelo EF Core (Npgsql). Tablas: 6.
+> Fuente: Base de datos PostgreSQL `subasta` (esquema public). Tablas: 6.
 >
-> Documento generado automáticamente por `generase-documentation.yml` (Subasta.DocGen) el 2026-10-03 02:25 UTC. No editar manualmente.
+> Documento generado automáticamente por `generase-documentation.yml` (Subasta.DocGen) el 2026-10-03 02:26 UTC. No editar manualmente.
 
 ## Resumen de tablas
 
@@ -23,11 +23,11 @@ Imágenes de los artículos subastados
 |---|---|---|---|---|---|---|---|
 | 1 | `Id` | uuid | No | ✔ |  |  | Identificador de la imagen |
 | 2 | `AuctionId` | uuid | No |  | → `auctions.Id` |  | Subasta a la que pertenece |
-| 3 | `ContentType` | character varying(50) | No |  |  |  | Tipo MIME de la imagen |
-| 4 | `CreatedAt` | timestamp with time zone | No |  |  |  | Fecha de carga (UTC) |
+| 3 | `FileName` | character varying(200) | No |  |  |  | Nombre original del archivo |
+| 4 | `ContentType` | character varying(50) | No |  |  |  | Tipo MIME de la imagen |
 | 5 | `Data` | bytea | No |  |  |  | Contenido binario de la imagen |
-| 6 | `FileName` | character varying(200) | No |  |  |  | Nombre original del archivo |
-| 7 | `SortOrder` | integer | No |  |  |  | Orden de visualización |
+| 6 | `SortOrder` | integer | No |  |  |  | Orden de visualización |
+| 7 | `CreatedAt` | timestamp with time zone | No |  |  |  | Fecha de carga (UTC) |
 
 **Llaves foráneas**
 
@@ -48,22 +48,22 @@ Artículos publicados para subasta
 | # | Columna | Tipo de dato | Nulo | PK | FK | Valor por defecto | Descripción |
 |---|---|---|---|---|---|---|---|
 | 1 | `Id` | uuid | No | ✔ |  |  | Identificador de la subasta |
-| 2 | `BidCount` | integer | No |  |  |  | Cantidad de pujas recibidas |
-| 3 | `CategoryId` | integer | No |  | → `categories.Id` |  | Categoría del artículo |
-| 4 | `ClosedAt` | timestamp with time zone | Sí |  |  |  | Fecha de cierre/adjudicación (UTC) |
-| 5 | `CreatedAt` | timestamp with time zone | No |  |  |  | Fecha de publicación (UTC) |
-| 6 | `CurrentPrice` | numeric(18,2) | No |  |  |  | Precio actual (mejor puja) |
-| 7 | `Description` | character varying(4000) | No |  |  |  | Descripción del artículo |
-| 8 | `EndAt` | timestamp with time zone | No |  |  |  | Fecha/hora de cierre (UTC) |
-| 9 | `MinIncrement` | numeric(18,2) | No |  |  |  | Incremento mínimo entre pujas |
-| 10 | `SellerId` | uuid | No |  | → `users.Id` |  | Usuario que publica la subasta |
-| 11 | `StartAt` | timestamp with time zone | No |  |  |  | Fecha/hora de inicio (UTC) |
-| 12 | `StartingPrice` | numeric(18,2) | No |  |  |  | Precio inicial |
-| 13 | `Status` | character varying(20) | No |  |  |  | Estado: Scheduled, Active, Finished, Cancelled |
-| 14 | `Title` | character varying(120) | No |  |  |  | Título del artículo |
-| 15 | `Version` | integer | No |  |  |  | Control de concurrencia optimista |
-| 16 | `WinnerId` | uuid | Sí |  | → `users.Id` |  | Usuario adjudicatario |
-| 17 | `WinningBidId` | uuid | Sí |  |  |  | Puja ganadora |
+| 2 | `Title` | character varying(120) | No |  |  |  | Título del artículo |
+| 3 | `Description` | character varying(4000) | No |  |  |  | Descripción del artículo |
+| 4 | `CategoryId` | integer | No |  | → `categories.Id` |  | Categoría del artículo |
+| 5 | `StartingPrice` | numeric(18,2) | No |  |  |  | Precio inicial |
+| 6 | `MinIncrement` | numeric(18,2) | No |  |  |  | Incremento mínimo entre pujas |
+| 7 | `CurrentPrice` | numeric(18,2) | No |  |  |  | Precio actual (mejor puja) |
+| 8 | `StartAt` | timestamp with time zone | No |  |  |  | Fecha/hora de inicio (UTC) |
+| 9 | `EndAt` | timestamp with time zone | No |  |  |  | Fecha/hora de cierre (UTC) |
+| 10 | `Status` | character varying(20) | No |  |  |  | Estado: Scheduled, Active, Finished, Cancelled |
+| 11 | `SellerId` | uuid | No |  | → `users.Id` |  | Usuario que publica la subasta |
+| 12 | `WinnerId` | uuid | Sí |  | → `users.Id` |  | Usuario adjudicatario |
+| 13 | `WinningBidId` | uuid | Sí |  |  |  | Puja ganadora |
+| 14 | `BidCount` | integer | No |  |  |  | Cantidad de pujas recibidas |
+| 15 | `CreatedAt` | timestamp with time zone | No |  |  |  | Fecha de publicación (UTC) |
+| 16 | `ClosedAt` | timestamp with time zone | Sí |  |  |  | Fecha de cierre/adjudicación (UTC) |
+| 17 | `Version` | integer | No |  |  |  | Control de concurrencia optimista |
 
 **Llaves foráneas**
 
@@ -90,9 +90,9 @@ Ofertas (pujas) realizadas
 | # | Columna | Tipo de dato | Nulo | PK | FK | Valor por defecto | Descripción |
 |---|---|---|---|---|---|---|---|
 | 1 | `Id` | uuid | No | ✔ |  |  | Identificador de la puja |
-| 2 | `Amount` | numeric(18,2) | No |  |  |  | Monto ofertado |
-| 3 | `AuctionId` | uuid | No |  | → `auctions.Id` |  | Subasta pujada |
-| 4 | `BidderId` | uuid | No |  | → `users.Id` |  | Usuario que puja |
+| 2 | `AuctionId` | uuid | No |  | → `auctions.Id` |  | Subasta pujada |
+| 3 | `BidderId` | uuid | No |  | → `users.Id` |  | Usuario que puja |
+| 4 | `Amount` | numeric(18,2) | No |  |  |  | Monto ofertado |
 | 5 | `CreatedAt` | timestamp with time zone | No |  |  |  | Fecha/hora de la puja (UTC) |
 
 **Llaves foráneas**
@@ -131,12 +131,12 @@ Notificaciones enviadas a los usuarios
 | # | Columna | Tipo de dato | Nulo | PK | FK | Valor por defecto | Descripción |
 |---|---|---|---|---|---|---|---|
 | 1 | `Id` | uuid | No | ✔ |  |  | Identificador de la notificación |
-| 2 | `AuctionId` | uuid | Sí |  | → `auctions.Id` |  | Subasta relacionada |
-| 3 | `CreatedAt` | timestamp with time zone | No |  |  |  | Fecha de creación (UTC) |
-| 4 | `IsRead` | boolean | No |  |  |  | Indica si fue leída |
+| 2 | `UserId` | uuid | No |  | → `users.Id` |  | Usuario destinatario |
+| 3 | `AuctionId` | uuid | Sí |  | → `auctions.Id` |  | Subasta relacionada |
+| 4 | `Type` | character varying(30) | No |  |  |  | Tipo de notificación |
 | 5 | `Message` | character varying(500) | No |  |  |  | Mensaje mostrado al usuario |
-| 6 | `Type` | character varying(30) | No |  |  |  | Tipo de notificación |
-| 7 | `UserId` | uuid | No |  | → `users.Id` |  | Usuario destinatario |
+| 6 | `IsRead` | boolean | No |  |  |  | Indica si fue leída |
+| 7 | `CreatedAt` | timestamp with time zone | No |  |  |  | Fecha de creación (UTC) |
 
 **Llaves foráneas**
 
@@ -159,12 +159,12 @@ Usuarios registrados de la plataforma
 | # | Columna | Tipo de dato | Nulo | PK | FK | Valor por defecto | Descripción |
 |---|---|---|---|---|---|---|---|
 | 1 | `Id` | uuid | No | ✔ |  |  | Identificador único del usuario |
-| 2 | `CreatedAt` | timestamp with time zone | No |  |  |  | Fecha de registro (UTC) |
+| 2 | `UserName` | character varying(50) | No |  |  |  | Nombre de usuario visible (único) |
 | 3 | `Email` | character varying(150) | No |  |  |  | Correo electrónico (único) |
-| 4 | `IsActive` | boolean | No |  |  |  | Indica si la cuenta está habilitada |
-| 5 | `PasswordHash` | character varying(500) | No |  |  |  | Hash PBKDF2 de la contraseña |
-| 6 | `Role` | character varying(20) | No |  |  |  | Rol: User o Admin |
-| 7 | `UserName` | character varying(50) | No |  |  |  | Nombre de usuario visible (único) |
+| 4 | `PasswordHash` | character varying(500) | No |  |  |  | Hash PBKDF2 de la contraseña |
+| 5 | `Role` | character varying(20) | No |  |  |  | Rol: User o Admin |
+| 6 | `IsActive` | boolean | No |  |  |  | Indica si la cuenta está habilitada |
+| 7 | `CreatedAt` | timestamp with time zone | No |  |  |  | Fecha de registro (UTC) |
 
 **Índices**
 

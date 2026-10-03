@@ -2,7 +2,7 @@
 
 > Componentes del frontend (React), de la API (.NET) y de la persistencia, con sus dependencias.
 >
-> Documento generado automáticamente por `generase-documentation.yml` (Subasta.DocGen) el 2026-10-03 02:25 UTC. No editar manualmente.
+> Documento generado automáticamente por `generase-documentation.yml` (Subasta.DocGen) el 2026-10-03 02:26 UTC. No editar manualmente.
 
 ```mermaid
 flowchart LR
